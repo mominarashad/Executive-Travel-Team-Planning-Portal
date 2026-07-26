@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ## .NET ##
 bin/
 obj/
@@ -74,3 +75,12 @@ Dockerfile.local
 ## OS files ##
 .DS_Store
 Thumbs.db
+=======
+node_modules/
+bin/
+obj/
+.env
+*.db
+.vs/
+.vscode/
+>>>>>>> 00ae1d3feb362a7f6e6f5839a360467b85aaceec
