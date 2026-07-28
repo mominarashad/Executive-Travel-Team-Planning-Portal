@@ -3,7 +3,7 @@ using TravelManagement.API.Features.TeamPlans.DTOs;
 using TravelManagement.API.Features.TeamPlans.Interfaces;
 using TravelManagement.API.Infrastructure.Persistence;
 using TravelManagement.API.Infrastructure.Persistence.Entities;
-
+using TravelManagement.API.Features.Email.Interfaces;
 namespace TravelManagement.API.Features.TeamPlans.Repositories;
 
 public class TeamPlanRepository : ITeamPlanRepository
@@ -13,10 +13,13 @@ public class TeamPlanRepository : ITeamPlanRepository
     private static readonly string[] ValidTypes = { "Trip", "Option", "Vacation", "Remote" };
     private static readonly string[] ValidApprovalStatuses = { "", "Pending", "Approved", "Rejected" };
 
-    public TeamPlanRepository(ApplicationDbContext context)
-    {
-        _context = context;
-    }
+    private readonly IEmailService _emailService;
+
+public TeamPlanRepository(ApplicationDbContext context, IEmailService emailService)
+{
+    _context = context;
+    _emailService = emailService;
+}
 
     // ---------- shared validation ----------
 
@@ -186,68 +189,103 @@ public class TeamPlanRepository : ITeamPlanRepository
         return await GetByIdAsync(entry.Id)
             ?? throw new Exception("Team Plan could not be loaded.");
     }
+    public async Task BulkCreateAsync(BulkCreateTeamPlanDto dto)
+{
+    if (dto.UserIds == null || dto.UserIds.Count == 0)
+        throw new InvalidOperationException("At least one user is required.");
+
+    if (dto.FromDate == null || dto.ToDate == null)
+        throw new InvalidOperationException("From and To dates are required.");
+
+    var from = dto.FromDate.Value;
+    var to = dto.ToDate.Value;
+
+    foreach (var userId in dto.UserIds.Distinct())
+    {
+        var (type, approval) = await ValidateAndCheckAsync(
+            userId, dto.CityId, from, to,
+            dto.Type, dto.ApprovalStatus, excludeEntryId: null);
+
+        var entry = new TeamPlanEntry
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            CityId = dto.CityId,
+            FromDate = from,
+            ToDate = to,
+            Type = type,
+            ApprovalStatus = approval,
+            Notes = dto.Notes ?? string.Empty,
+            IsActive = true
+        };
+
+        _context.TeamPlanEntries.Add(entry);
+
+        // Saved per-entry so subsequent iterations in this same batch
+        // see prior entries when checking for conflicts.
+        await _context.SaveChangesAsync();
+    }
+}
 
     public async Task<bool> UpdateAsync(Guid id, UpdateTeamPlanDto dto)
+{
+    var entry = await _context.TeamPlanEntries
+        .FirstOrDefaultAsync(tp => tp.Id == id && tp.IsActive);
+
+    if (entry == null)
+        return false;
+
+    var previousApprovalStatus = entry.ApprovalStatus;
+
+    var (type, approval) = await ValidateAndCheckAsync(
+        dto.UserId, dto.CityId, dto.FromDate, dto.ToDate,
+        dto.Type, dto.ApprovalStatus, excludeEntryId: entry.Id);
+
+    entry.UserId = dto.UserId;
+    entry.CityId = dto.CityId;
+    entry.FromDate = dto.FromDate;
+    entry.ToDate = dto.ToDate;
+    entry.Type = type;
+    entry.ApprovalStatus = approval;
+    entry.Notes = dto.Notes;
+
+    await _context.SaveChangesAsync();
+
+    // Notify on a genuine status change for a Vacation entry only
+    // (Approved/Rejected are the only decisions worth notifying about).
+    if (type == "Vacation"
+        && previousApprovalStatus != approval
+        && (approval == "Approved" || approval == "Rejected"))
     {
-        var entry = await _context.TeamPlanEntries
-            .FirstOrDefaultAsync(tp => tp.Id == id && tp.IsActive);
-
-        if (entry == null)
-            return false;
-
-        var (type, approval) = await ValidateAndCheckAsync(
-            dto.UserId, dto.CityId, dto.FromDate, dto.ToDate,
-            dto.Type, dto.ApprovalStatus, excludeEntryId: entry.Id);
-
-        entry.UserId = dto.UserId;
-        entry.CityId = dto.CityId;
-        entry.FromDate = dto.FromDate;
-        entry.ToDate = dto.ToDate;
-        entry.Type = type;
-        entry.ApprovalStatus = approval;
-        entry.Notes = dto.Notes;
-
-        await _context.SaveChangesAsync();
-        return true;
-    }
-
-    public async Task BulkCreateAsync(BulkCreateTeamPlanDto dto)
-    {
-        if (dto.UserIds == null || dto.UserIds.Count == 0)
-            throw new InvalidOperationException("At least one user is required.");
-
-        if (dto.FromDate == null || dto.ToDate == null)
-            throw new InvalidOperationException("From and To dates are required.");
-
-        var from = dto.FromDate.Value;
-        var to = dto.ToDate.Value;
-
-        foreach (var userId in dto.UserIds.Distinct())
+        var user = await _context.Users.FindAsync(entry.UserId);
+        if (user != null && !string.IsNullOrWhiteSpace(user.Email))
         {
-            var (type, approval) = await ValidateAndCheckAsync(
-                userId, dto.CityId, from, to,
-                dto.Type, dto.ApprovalStatus, excludeEntryId: null);
+            var subject = $"Vacation Request {approval} — {entry.FromDate:MMM d} to {entry.ToDate:MMM d}";
+            var body = $@"
+                <h2>Vacation Request Update</h2>
+                <p>Hi {user.Name},</p>
+                <p>Your vacation request from <strong>{entry.FromDate:MMM d, yyyy}</strong> to
+                <strong>{entry.ToDate:MMM d, yyyy}</strong> has been
+                <strong style='color:{(approval == "Approved" ? "green" : "red")}'>{approval}</strong>.</p>
+                {(string.IsNullOrWhiteSpace(entry.Notes) ? "" : $"<p>Notes: {entry.Notes}</p>")}
+            ";
 
-            var entry = new TeamPlanEntry
+            // Don't let an email failure roll back the actual approval decision —
+            // log-and-continue rather than throw.
+            try
             {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                CityId = dto.CityId,
-                FromDate = from,
-                ToDate = to,
-                Type = type,
-                ApprovalStatus = approval,
-                Notes = dto.Notes ?? string.Empty,
-                IsActive = true
-            };
-
-            _context.TeamPlanEntries.Add(entry);
-
-            // Saved per-entry so subsequent iterations in this same batch
-            // see prior entries when checking for conflicts.
-            await _context.SaveChangesAsync();
+                await _emailService.SendEmailAsync(user.Email, subject, body);
+            }
+            catch
+            {
+                // Intentionally swallowed: the approval itself already succeeded and
+                // was saved; a notification failure shouldn't undo a real decision.
+            }
         }
     }
+
+    return true;
+}
 
     public async Task<IEnumerable<TeamPlanSummaryDto>> GetSummaryAsync(Guid userId)
     {
