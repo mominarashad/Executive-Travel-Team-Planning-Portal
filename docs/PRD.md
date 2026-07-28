@@ -339,4 +339,10 @@ The following data must load automatically on first `docker compose up`:
 
 ---
 
+### Known Limitations
+
+- **US-09 (TBC/undated entries)** is not supported. `TeamPlanEntry.FromDate`/`ToDate` are non-nullable in the current schema, so a plan entry with no dates cannot be represented. This is a Should-have per the PRD's own MoSCoW table, not a Must-have, and was consciously deprioritized given the project timeline.
+
+---
+
 *This document will evolve during the build phase. Deviations discovered during implementation will be documented here with dates and reasoning.*
