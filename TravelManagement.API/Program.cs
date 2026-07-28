@@ -63,6 +63,10 @@ using TravelManagement.API.Features.OnePager.Services;
 using TravelManagement.API.Features.DataManagement.Interfaces;
 using TravelManagement.API.Features.DataManagement.Repositories;
 using TravelManagement.API.Features.DataManagement.Services;
+
+using TravelManagement.API.Features.Email;
+using TravelManagement.API.Features.Email.Interfaces;
+using TravelManagement.API.Features.Email.Services;
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors(options =>
@@ -126,6 +130,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // JWT Settings
 builder.Services.Configure<JwtSettings>(
     builder.Configuration.GetSection(JwtSettings.SectionName));
+
+builder.Services.Configure<EmailSettings>(
+    builder.Configuration.GetSection(EmailSettings.SectionName));
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 var jwtSettings = builder.Configuration
     .GetSection(JwtSettings.SectionName)
@@ -202,6 +210,7 @@ builder.Services.AddScoped<IOnePagerService, OnePagerService>();
 
 builder.Services.AddScoped<IDataManagementRepository, DataManagementRepository>();
 builder.Services.AddScoped<IDataManagementService, DataManagementService>();
+
 var app = builder.Build();
 
 //
@@ -210,7 +219,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await context.Database.MigrateAsync(); 
+    await context.Database.MigrateAsync();
     await DatabaseSeeder.SeedAsync(context);
 }
 
@@ -225,10 +234,11 @@ app.UseHttpsRedirection();
 
 app.UseGlobalExceptionMiddleware();
 
+app.UseCors("FrontendPolicy");
 app.UseAuthentication();
 
 app.UseAuthorization();
-app.UseCors("FrontendPolicy");
+
 app.MapControllers();
 
 app.Run();
