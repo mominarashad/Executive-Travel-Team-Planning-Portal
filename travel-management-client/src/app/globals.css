@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+}
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
+  .onepager-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  .page-break-avoid {
+    break-inside: avoid;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 1.5cm;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+}

@@ -64,7 +64,7 @@ docker-compose.override.yml
 *.pid
 Dockerfile.local
 
-## Database / EF Core migrations working files ##
+## Database / EF Core migrations working files (keep migrations themselves) ##
 *.mdf
 *.ldf
 *.sqlite
@@ -74,8 +74,7 @@ Dockerfile.local
 .DS_Store
 Thumbs.db
 
-## Node / Next.js (travel-management-client) ##
-travel-management-client/node_modules/
-travel-management-client/.next/
-travel-management-client/out/
-travel-management-client/.env*
+## Node / Next.js ##
+node_modules/
+.next/
+out/
