@@ -211,6 +211,8 @@ builder.Services.AddScoped<IOnePagerService, OnePagerService>();
 builder.Services.AddScoped<IDataManagementRepository, DataManagementRepository>();
 builder.Services.AddScoped<IDataManagementService, DataManagementService>();
 
+
+
 var app = builder.Build();
 
 //
@@ -219,10 +221,18 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await context.Database.MigrateAsync();
+
+    if (context.Database.IsRelational())
+    {
+        await context.Database.MigrateAsync();
+    }
+    else
+    {
+        await context.Database.EnsureCreatedAsync();
+    }
+
     await DatabaseSeeder.SeedAsync(context);
 }
-
 // Configure HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
@@ -241,4 +251,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+
 app.Run();
+
+public partial class Program { }

@@ -7,8 +7,6 @@ public static class DatabaseSeeder
 {
     public static async Task SeedAsync(ApplicationDbContext context)
     {
-        await context.Database.MigrateAsync();
-
         await RoleSeeder.SeedAsync(context);
         await UserSeeder.SeedAsync(context);
         await DirectorySeeder.SeedAsync(context);

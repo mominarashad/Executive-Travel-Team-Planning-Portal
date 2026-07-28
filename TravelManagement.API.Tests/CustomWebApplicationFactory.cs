@@ -1,0 +1,37 @@
+using BCrypt.Net;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using TravelManagement.API.Infrastructure.Persistence;
+using TravelManagement.API.Infrastructure.Seed;
+
+namespace TravelManagement.API.Tests;
+
+public class CustomWebApplicationFactory : WebApplicationFactory<Program>
+{
+    private static readonly string DbName = $"TestDb_{Guid.NewGuid()}";
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.ConfigureServices(services =>
+        {
+            var descriptors = services
+                .Where(d =>
+                    d.ServiceType == typeof(DbContextOptions<ApplicationDbContext>) ||
+                    d.ServiceType == typeof(ApplicationDbContext) ||
+                    (d.ServiceType.FullName != null &&
+                     d.ServiceType.FullName.Contains("EntityFrameworkCore")))
+                .ToList();
+
+            foreach (var descriptor in descriptors)
+            {
+                services.Remove(descriptor);
+            }
+
+            services.AddDbContext<ApplicationDbContext>(options =>
+                options.UseInMemoryDatabase(DbName));
+        });
+    }}
+
+  
