@@ -102,9 +102,29 @@ public class OnePagerRepository : IOnePagerRepository
             .ToList();
 
         var totalDays = daysByCountry.Sum(d => d.Days);
+        // ---- Flights on file for this person ----
+        var flights = await _context.Flights
+            .Where(f => f.IsActive && f.UserId == userId)
+            .Include(f => f.Trip).ThenInclude(t => t.DestinationCity)
+            .OrderBy(f => f.DepartureTime)
+            .Select(f => new OnePagerFlightDto
+            {
+                TripCity = f.Trip.DestinationCity.Name,
+                Airline = f.Airline,
+                FlightNumber = f.FlightNumber,
+                DepartureTime = f.DepartureTime,
+                ArrivalTime = f.ArrivalTime,
+                DepartureAirport = f.DepartureAirport,
+                ArrivalAirport = f.ArrivalAirport,
+                Aircraft = f.Aircraft,
+                BookingReference = f.BookingReference
+            })
+            .ToListAsync();
 
         // ---- Meetings across all of this person's trips ----
         var meetings = await _context.Meetings
+
+
             .Where(m => m.IsActive && tripIds.Contains(m.TripId))
             .Include(m => m.Trip).ThenInclude(t => t.DestinationCity)
             .Include(m => m.Contact)
@@ -147,6 +167,7 @@ public class OnePagerRepository : IOnePagerRepository
             Itinerary = itinerary,
             DaysByCountry = daysByCountry,
             TotalDays = totalDays,
+            Flights = flights,
             Meetings = meetings
         };
     }
