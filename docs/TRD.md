@@ -59,127 +59,162 @@ flowchart TB
 
 ```mermaid
 erDiagram
-    USERS ||--o{ CEO_TRIPS : "created_by"
-    USERS }o--o{ TRIP_TEAM_MEMBERS : "travels on"
-    USERS }o--o{ MEETING_TEAM_MEMBERS : "attends"
-    USERS ||--o{ TEAM_PLAN_ENTRIES : "has"
-    USERS ||--o{ FLIGHTS : "travels on"
-    USERS ||--o{ MATERIALS : "owns"
 
-    CEO_TRIPS ||--o{ TRIP_TEAM_MEMBERS : "includes"
-    CEO_TRIPS ||--o{ MEETINGS : "has"
-    CEO_TRIPS }o--|| PROJECTS : "for"
-    CEO_TRIPS }o--|| MGH_ENTITIES : "for"
-    CEO_TRIPS }o--o| FLIGHTS : "uses"
+    ROLES ||--o{ USERS : has
 
-    MEETINGS ||--o{ MEETING_TEAM_MEMBERS : "includes"
-    MEETINGS ||--o{ MATERIALS : "needs"
-    MEETINGS }o--o| DIRECTORY_CONTACTS : "with"
-    MEETINGS }o--o| PROJECTS : "for"
-    MEETINGS }o--o| MGH_ENTITIES : "for"
+    USERS ||--o{ TEAMPLANENTRIES : owns
+    CITIES ||--o{ TEAMPLANENTRIES : location
 
-    DIRECTORY_CITIES ||--o{ DIRECTORY_CONTACTS : "contains"
-    DIRECTORY_CITIES ||--o{ HOTELS : "has"
+    CITIES ||--o{ HOTELS : contains
+    CITIES ||--o{ CONTACTS : located_in
+    CITIES ||--o{ TRIPS : destination
+
+    PROJECTS ||--o{ TRIPS : project
+    BUSINESSENTITIES ||--o{ TRIPS : business_entity
+
+    TRIPS ||--o{ TRIPMEMBERS : has
+    USERS ||--o{ TRIPMEMBERS : member
+
+    TRIPS ||--o{ FLIGHTS : contains
+    USERS ||--o{ FLIGHTS : traveler
+
+    TRIPS ||--o{ MEETINGS : contains
+    CONTACTS ||--o{ MEETINGS : contact
+    PROJECTS ||--o{ MEETINGS : project
+    BUSINESSENTITIES ||--o{ MEETINGS : business_entity
+
+    MEETINGS ||--o{ MEETINGATTENDEES : attendees
+    USERS ||--o{ MEETINGATTENDEES : attendee
+
+    MEETINGS ||--o{ MEETINGMATERIALS : materials
+    USERS ||--o{ MEETINGMATERIALS : owner
+
+    ROLES {
+        guid Id PK
+        string Name
+    }
 
     USERS {
-        uuid id PK
-        string name
-        string email UK
-        string password_hash
-        string title
-        string function
-        bool is_ceo
-        string role
+        guid Id PK
+        string Name
+        string Email
+        string PasswordHash
+        string Title
+        string Function
+        bool IsCeo
+        guid RoleId FK
     }
-    CEO_TRIPS {
-        uuid id PK
-        uuid project_id FK
-        uuid entity_id FK
-        string destination_city
-        date from_date "nullable = TBC"
-        date to_date "nullable = TBC"
-        string status
-        string hotel
-        string transportation
-        uuid flight_id FK "nullable"
-        string origin_city
-        uuid created_by FK
-        timestamptz created_at
-        timestamptz updated_at
+
+    CITIES {
+        guid Id PK
+        string Name
+        string Country
+        bool IsActive
     }
-    MEETINGS {
-        uuid id PK
-        uuid trip_id FK
-        uuid contact_id FK "nullable"
-        int display_order
-        string priority
-        string status
-        time scheduled_time "nullable"
-        uuid project_id FK "nullable"
-        uuid entity_id FK "nullable"
-        text agenda
-    }
-    MATERIALS {
-        uuid id PK
-        uuid meeting_id FK
-        string description
-        uuid owner_id FK "nullable"
-    }
-    FLIGHTS {
-        uuid id PK
-        uuid traveller_id FK
-        string route
-        string flight_date "raw text, prototype-compatible"
-        string flight_number
-        string departure
-        string arrival
-        string aircraft
-    }
-    TEAM_PLAN_ENTRIES {
-        uuid id PK
-        uuid person_id FK
-        date from_date "nullable"
-        date to_date "nullable"
-        string city
-        string type
-        text notes
-        string approval_status "nullable"
-    }
-    DIRECTORY_CITIES {
-        uuid id PK
-        string name UK
-    }
-    DIRECTORY_CONTACTS {
-        uuid id PK
-        uuid city_id FK
-        string display_name
-        string org "nullable"
-        string role "nullable"
-        string email "nullable"
-        int sort_order
-    }
+
     HOTELS {
-        uuid id PK
-        uuid city_id FK
-        string name
+        guid Id PK
+        guid CityId FK
+        string Name
+        bool IsCustom
+        bool IsActive
     }
+
     PROJECTS {
-        uuid id PK
-        string name UK
-        bool is_seed
+        guid Id PK
+        string Name
+        bool IsSystem
+        bool IsActive
     }
-    MGH_ENTITIES {
-        uuid id PK
-        string name UK
-        bool is_seed
+
+    BUSINESSENTITIES {
+        guid Id PK
+        string Name
+        bool IsSystem
+        bool IsActive
     }
-    TRIP_TEAM_MEMBERS {
-        uuid trip_id FK
-        uuid user_id FK
+
+    CONTACTS {
+        guid Id PK
+        string Name
+        string Organization
+        string Role
+        string Email
+        string Phone
+        int SortOrder
+        bool IsActive
+        guid CityId FK
     }
-    MEETING_TEAM_MEMBERS {
-        uuid meeting_id FK
-        uuid user_id FK
+
+    TRIPS {
+        guid Id PK
+        guid DestinationCityId FK
+        guid ProjectId FK
+        guid BusinessEntityId FK
+        date StartDate
+        date EndDate
+        string Status
+        string Hotel
+        string Transport
+        string FlightInfo
+        string Notes
+    }
+
+    TRIPMEMBERS {
+        guid Id PK
+        guid TripId FK
+        guid UserId FK
+    }
+
+    FLIGHTS {
+        guid Id PK
+        guid TripId FK
+        guid UserId FK
+        string Airline
+        string FlightNumber
+        datetime DepartureTime
+        datetime ArrivalTime
+        string DepartureAirport
+        string ArrivalAirport
+        string BookingReference
+        string Aircraft
+    }
+
+    MEETINGS {
+        guid Id PK
+        guid TripId FK
+        guid ContactId FK
+        guid ProjectId FK
+        guid BusinessEntityId FK
+        int DisplayOrder
+        string Priority
+        string Status
+        datetime ScheduledTime
+        string Agenda
+    }
+
+    MEETINGATTENDEES {
+        guid Id PK
+        guid MeetingId FK
+        guid UserId FK
+    }
+
+    MEETINGMATERIALS {
+        guid Id PK
+        guid MeetingId FK
+        string Description
+        guid OwnerId FK
+    }
+
+    TEAMPLANENTRIES {
+        guid Id PK
+        guid UserId FK
+        guid CityId FK
+        date FromDate
+        date ToDate
+        string Type
+        string ApprovalStatus
+        string Notes
     }
 ```
 
