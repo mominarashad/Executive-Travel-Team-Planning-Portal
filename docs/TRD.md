@@ -227,82 +227,76 @@ All endpoints are under `/api`, return JSON, and require a valid JWT (`Authoriza
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/trips?person=&project=&q=` | filters mirror the prototype's trip filter bar |
-| GET | `/api/trips/{id}` | full trip incl. meetings + materials |
-| POST | `/api/trips` | create; `409`-style `400` with `"noMeetings": true` flag if no meetings supplied, so the frontend can show the "Add trip anyway?" confirm (business rule #3) |
+| GET | `/api/trips` | all active trips |
+| GET | `/api/trips/search?cityId=&projectId=&personId=&search=` | filtered/grouped Upcoming vs. Past |
+| GET | `/api/trips/{id}` | full trip incl. meetings, team members |
+| POST | `/api/trips` | create; validated (dates, references, double-booking) |
+| POST | `/api/trips/bulk` | bulk-add multi-leg rows, no meetings |
 | PUT | `/api/trips/{id}` | update |
-| DELETE | `/api/trips/{id}` | delete (cascades meetings/materials) |
-| POST | `/api/trips/bulk` | bulk-add rows from the multi-trip table, no meetings |
+| DELETE | `/api/trips/{id}` | soft-delete |
 
-### 3.3 Meetings & Materials (nested under trips)
+### 3.3 Meetings & Materials (flat routes, not nested)
 
 | Method | Path |
 |---|---|
-| POST | `/api/trips/{tripId}/meetings` |
+| GET | `/api/meetings` |
+| GET | `/api/meetings/{id}` |
+| POST | `/api/meetings` | `tripId` supplied in body; materials are an inline array on the same request, not a separate endpoint |
 | PUT | `/api/meetings/{id}` |
 | DELETE | `/api/meetings/{id}` |
-| POST | `/api/meetings/{meetingId}/materials` |
-| DELETE | `/api/materials/{id}` |
 
 ### 3.4 Flights
 
 | Method | Path |
 |---|---|
 | GET | `/api/flights` |
-| POST | `/api/flights` |
-| PUT | `/api/flights/{id}` (inline edit) |
+| POST | `/api/flights` | validated (references, time ordering, overlap) |
+| PUT | `/api/flights/{id}` |
 | DELETE | `/api/flights/{id}` |
 
 ### 3.5 Team Plan
 
 | Method | Path |
 |---|---|
-| GET | `/api/team-plan` | all people with their entries |
-| POST | `/api/team-plan/entries` | single entry |
-| POST | `/api/team-plan/bulk` | bulk-add across selected people |
-| PUT | `/api/team-plan/entries/{id}` | includes approval status updates |
-| DELETE | `/api/team-plan/entries/{id}` |
+| GET | `/api/TeamPlans` |
+| GET | `/api/TeamPlans/summary/{userId}` | days-by-country |
+| GET | `/api/TeamPlans/{id}` |
+| POST | `/api/TeamPlans` | single entry |
+| POST | `/api/TeamPlans/bulk` | multi-person |
+| PUT | `/api/TeamPlans/{id}` | includes approval status; triggers email notification on Approved/Rejected |
+| DELETE | `/api/TeamPlans/{id}` |
 
 ### 3.6 Directory
 
 | Method | Path |
 |---|---|
-| GET | `/api/directory` | cities with nested contacts |
-| POST | `/api/directory/cities` |
-| DELETE | `/api/directory/cities/{id}` |
-| POST | `/api/directory/cities/{id}/contacts` |
-| DELETE | `/api/directory/contacts/{id}` |
+| GET / POST / PUT / DELETE | `/api/directory/cities` |
+| GET | `/api/directory/cities/autocomplete?term=` |
+| GET | `/api/directory/cities/{cityId}/contacts` |
+| GET / POST / PUT / DELETE | `/api/directory/contacts` |
 
-### 3.7 Reference Data & Calendar
-
-| Method | Path |
-|---|---|
-| GET / POST | `/api/projects`, `/api/entities`, `/api/hotels` |
-| GET | `/api/calendar?from=&to=` | computed union view for the calendar dashboard |
-| GET | `/api/one-pagers/{personId}` | itinerary + meetings + days-by-country, pre-aggregated |
-
-### 3.8 State Management
+### 3.7 Reference Data, Calendar, Dashboard, One-Pager
 
 | Method | Path |
 |---|---|
-| GET | `/api/state/export` | full JSON dump, prototype-compatible shape |
-| POST | `/api/state/import` | replace state from uploaded JSON |
-| POST | `/api/state/reset` | reseed `DEFAULT_STATE`-equivalent demo data |
+| GET / POST / PUT / DELETE | `/api/hotels`, `/api/projects`, `/api/entities` |
+| GET | `/api/hotels/city/{cityId}` |
+| GET | `/api/calendar?from=&to=&personIds=` | merged Trip + TeamPlan view, deduplicated |
+| GET | `/api/dashboard` | CEO-scoped KPIs (upcoming trips, next departure, travel days, meetings, travelers this week, at-risk trips) |
+| GET | `/api/onepager/{userId}` | itinerary, days-by-country, flights, meetings |
+| POST | `/api/onepager/{userId}/send` | emails the one-pager to a given address via Mailpit |
 
-### 3.9 Real-Time (SignalR hub — `/hubs/sync`)
+### 3.8 Data Management
 
-Server → client events (payloads are thin pointers, not full entities, to keep broadcasts cheap):
+| Method | Path |
+|---|---|
+| GET | `/api/data/export` | full JSON dump; `Users` included without `PasswordHash` |
+| POST | `/api/data/import` | replaces business data only (Trips, Meetings, Directory, Flights, TeamPlans, Hotels, Projects, Entities); never overwrites Users/Roles; transactional with rollback on failure |
 
-```
-TripChanged        { tripId, action: "created" | "updated" | "deleted" }
-MeetingChanged      { meetingId, tripId, action }
-TeamPlanChanged     { entryId, personId, action }
-FlightChanged       { flightId, action }
-DirectoryChanged    { cityId, action }
-```
+> `/api/state/reset` (reseed endpoint) was not implemented — not required by any Must-have user story.
+### 3.9 Multi-User Consistency
 
-Clients subscribe on connect and invalidate/re-fetch the relevant React Query cache key — this keeps the hub simple and avoids ever sending the whole app state over the wire.
-
+Implemented via client-side polling (30-second interval) on Dashboard, Trips, Team Plan, and Calendar pages, silently refreshing list state without disrupting open forms. SignalR/WebSocket push (§1's original diagram) was not implemented — see the deviation note in §1.1.
 ---
 
 ## 4. Technology Decisions & Trade-offs
@@ -313,8 +307,8 @@ Clients subscribe on connect and invalidate/re-fetch the relevant React Query ca
 | Backend framework | ASP.NET Core (.NET 9) Web API | Given. Strong typing and EF Core migrations cost more ceremony than a Node/Express equivalent, but buy compile-time safety across a schema this relational (10+ entities with FKs) |
 | Database | PostgreSQL | Given. The domain is inherently relational (trips → meetings → materials, many-to-many team assignments) — a document store (MongoDB) would need to re-implement joins in application code for very little benefit here |
 | ORM | EF Core (Npgsql provider) | Slower raw-query performance than Dapper, accepted for migration tooling (`dotnet ef migrations`) that directly satisfies the "apply migrations on `docker compose up`" requirement |
-| Real-time sync | SignalR over WebSockets | Chosen per the bonus requirement over polling. Cost: connection lifecycle management (reconnect/backoff) and a slightly more complex frontend subscription layer; benefit: near-instant multi-user consistency without wasted polling requests |
-| Auth | JWT, seeded users, ASP.NET Core `PasswordHasher` | Simple auth is explicitly called out as sufficient. JWT (vs. cookie sessions) chosen because Next.js and the API run as separate origins in Docker, and it's the same mechanism the SignalR hub can piggyback on for its handshake |
+| Real-time sync | Polling (30s interval) | SignalR was considered but deprioritized given timeline; polling satisfies the BRD's explicit "polling is acceptable" allowance with far less implementation risk |
+| Auth | JWT, seeded users, BCrypt password hashing | Simple auth is explicitly called out as sufficient. BCrypt chosen over `PasswordHasher<T>` for straightforward verify-by-hash semantics; JWT chosen since Next.js and the API run as separate origins in Docker |
 | Reference data model | Real tables for projects/entities/hotels instead of hardcoded enums | Slightly more schema (3 extra tables) in exchange for correctly supporting the prototype's "Other (type new)" growth pattern without app redeploys |
 | Containerization | Docker Compose, 3 services (db, api, web) | No orchestration (Kubernetes) — correctly scoped for a single-instance internal tool; trade-off is manual scaling if usage ever grows beyond one host, which is out of scope here |
 
@@ -338,16 +332,17 @@ Clients subscribe on connect and invalidate/re-fetch the relevant React Query ca
 ```mermaid
 flowchart LR
     subgraph Host["Docker host — docker compose up"]
-        subgraph net["mgh-network (bridge)"]
+        subgraph net["bridge network"]
             web["web<br/>Next.js<br/>:3000"]
             api["api<br/>.NET 9<br/>:8080"]
             db[("postgres<br/>:5432")]
+            mail["mailpit<br/>:8025 (UI) / :1025 (SMTP)"]
         end
     end
     Browser -->|":3000"| web
     web -->|"/api proxy → :8080"| api
-    Browser -.->|"WebSocket :8080/hubs/sync"| api
     api --> db
+    api --> mail
 ```
 
 **`docker-compose.yml` shape:**
