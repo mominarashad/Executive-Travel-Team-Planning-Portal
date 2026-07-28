@@ -181,10 +181,32 @@ Raw request/response pairs for each case above are available in the development 
 |---|---|---|
 | Flights (`/api/flights`) validation audit | Not performed | Same CRUD risk profile as Hotels; deferred due to time constraints, no double-booking-style risk present |
 | TBC entries (US-09, no-date plan entries) | Not supported | `TeamPlanEntry.FromDate`/`ToDate` are non-nullable in the current schema; documented as a known deviation rather than blocking MVP (US-09 is a Should-have) |
-| Automated test suite / CI pipeline | Not implemented | Bonus scope item; all testing in this document was manual |
+| Automated test suite / CI pipeline | **Implemented** — see §6 | Converted the highest-value manual cases (double-booking, RBAC, rollback) into automated tests, now part of the delivered submission |
 
 ---
 
-## 5. Bonus Scope Note
+## 5. Flight & Email Validation (Added Post-Initial Test Plan)
 
-Automated tests (unit/integration/e2e) were identified as bonus scope in the assignment brief but were not implemented in this pass, given the volume of manual validation work required to harden the core business rules (particularly the double-booking logic across Trips and TeamPlans). All test cases in §2 are candidates for conversion into automated integration tests (e.g. via `WebApplicationFactory` + `xUnit`) as a follow-up improvement.
+| ID | Case | Steps | Expected | Result |
+|---|---|---|---|---|
+| FLT-01 | Overlap detection | Book a flight for a traveller, then attempt a second overlapping flight for the same traveller | `400`, `"Traveller already has a flight (...) that overlaps this time window."` | ✅ Pass |
+| FLT-02 | Time sanity | `POST` with `arrivalTime <= departureTime` | `400`, `"Arrival time must be after departure time."` | ✅ Pass |
+| EML-01 | One-pager email delivery | Trigger `POST /api/onepager/{userId}/send`, check Mailpit inbox | Email received with formatted itinerary/meetings/flights tables | ✅ Pass (manually verified via Mailpit UI) |
+| EML-02 | Vacation approval notification | Change a Vacation entry's `ApprovalStatus` from Pending to Approved | Email received addressed to that user, subject reflects decision | ✅ Pass (manually verified via Mailpit UI) |
+
+## 6. Automated Test Suite & CI Pipeline
+
+An xUnit test project (`TravelManagement.API.Tests`) was added using `WebApplicationFactory<Program>` and EF Core's in-memory provider, converting the highest-value manual test cases into automated, repeatable tests:
+
+| Test | Covers |
+|---|---|
+| `ConfirmedTripOverlap_IsRejected` | TRP-03 — confirmed vs. confirmed double-booking rejection |
+| `TentativeTripOverlap_IsAllowed` | TRP-04 — tentative vs. tentative exemption |
+| `UnauthenticatedRequest_Returns401` | SEC-02 |
+| `NonAdminUser_CreatingUser_Returns403` | SEC-04 |
+| `AdminUser_CreatingUser_Returns201` | SEC-05 |
+| `CorruptedImport_RollsBackWithoutLosingExistingData` | EXP-04 — transactional rollback |
+
+**Result:** 6/6 passing locally and in CI.
+
+**CI Pipeline:** GitHub Actions workflow (`.github/workflows/ci.yml`) runs `dotnet restore` → `dotnet build` → `dotnet test` on every push/PR to `main`. Verified green — see the repository's Actions tab for live run history.
