@@ -23,13 +23,50 @@ public class DashboardRepository : IDashboardRepository
         var weekEnd = today.AddDays(WEEK_WINDOW_DAYS);
         var attentionCutoff = today.AddDays(ATTENTION_WINDOW_DAYS);
 
+        // ---- Resolve the CEO ----
+        // Dashboard is scoped to the CEO specifically: only trips/meetings where
+        // the CEO is a TripMember or MeetingAttendee count. This excludes
+        // delegation trips created without the CEO (per the "soft default,
+        // never enforced" team-member rule on trip creation).
+        var ceoId = await _context.Users
+            .Where(u => u.IsCeo)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync();
+
+        // If no CEO is configured, every metric below returns zeroed/empty
+        // rather than silently falling back to company-wide totals.
+        if (ceoId == null)
+        {
+            return new DashboardDto
+            {
+                UpcomingTripsCount = 0,
+                NextDeparture = null,
+                TotalTravelDaysThisYear = 0,
+                UpcomingMeetingsCount = 0,
+                TravelersThisWeekCount = 0,
+                TripsNeedingAttentionCount = 0
+            };
+        }
+
+        // A trip "involves the CEO" if he's a TripMember OR attends any of its meetings.
+        var ceoTripIds = await _context.TripMembers
+            .Where(tm => tm.UserId == ceoId)
+            .Select(tm => tm.TripId)
+            .Union(
+                _context.MeetingAttendees
+                    .Where(a => a.UserId == ceoId)
+                    .Select(a => a.Meeting.TripId)
+            )
+            .Distinct()
+            .ToListAsync();
+
         // ---- Upcoming trips count ----
         var upcomingTripsCount = await _context.Trips
-            .CountAsync(t => t.IsActive && t.StartDate >= today);
+            .CountAsync(t => t.IsActive && t.StartDate >= today && ceoTripIds.Contains(t.Id));
 
         // ---- Next departure ----
         var nextTrip = await _context.Trips
-            .Where(t => t.IsActive && t.StartDate >= today)
+            .Where(t => t.IsActive && t.StartDate >= today && ceoTripIds.Contains(t.Id))
             .OrderBy(t => t.StartDate)
             .Select(t => new
             {
@@ -54,7 +91,7 @@ public class DashboardRepository : IDashboardRepository
         // A trip spanning a year boundary (e.g. Dec 30 - Jan 2) counts fully
         // toward the year it starts in, not split across years.
         var thisYearTrips = await _context.Trips
-            .Where(t => t.IsActive && t.StartDate.Year == currentYear)
+            .Where(t => t.IsActive && t.StartDate.Year == currentYear && ceoTripIds.Contains(t.Id))
             .Select(t => new { t.StartDate, t.EndDate })
             .ToListAsync();
 
@@ -62,15 +99,14 @@ public class DashboardRepository : IDashboardRepository
             .Sum(t => t.EndDate.DayNumber - t.StartDate.DayNumber + 1);
 
         // ---- Upcoming meetings count ----
-        // Meetings belonging to trips that haven't started yet.
+        // Meetings belonging to CEO trips that haven't started yet.
         var upcomingMeetingsCount = await _context.Meetings
-            .CountAsync(m => m.IsActive && m.Trip.IsActive && m.Trip.StartDate >= today);
+            .CountAsync(m => m.IsActive && m.Trip.IsActive && m.Trip.StartDate >= today
+                && ceoTripIds.Contains(m.TripId));
 
         // ---- Travelers this week ----
-        // Informational count (not a conflict check): anyone with any active
-        // trip involvement (TripMember or MeetingAttendee) OR a TeamPlanEntry
-        // of type Trip/Remote overlapping the next 7 days. Vacation is
-        // intentionally excluded here since "traveling" != "on leave".
+        // Kept company-wide (not CEO-scoped) — this metric answers "who is
+        // traveling this week" for planning purposes, not "who is with the CEO."
         var tripTravelers = await _context.TripMembers
             .Where(tm => tm.Trip.IsActive
                 && tm.Trip.StartDate <= weekEnd
@@ -100,11 +136,12 @@ public class DashboardRepository : IDashboardRepository
             .Count();
 
         // ---- Trips needing attention ----
-        // Upcoming (within the attention window) trips missing hotel or transport.
+        // Upcoming (within the attention window) CEO trips missing hotel or transport.
         var tripsNeedingAttentionCount = await _context.Trips
             .CountAsync(t => t.IsActive
                 && t.StartDate >= today
                 && t.StartDate <= attentionCutoff
+                && ceoTripIds.Contains(t.Id)
                 && (string.IsNullOrWhiteSpace(t.Hotel) || string.IsNullOrWhiteSpace(t.Transport)));
 
         return new DashboardDto
