@@ -42,6 +42,7 @@ This document defines the product requirements for rebuilding the MGH Executive 
 - **Frustrations:** Having to ask Grace for the latest version, can't request vacation and see approval status in one place
 - **Usage:** Weekly, 10–20 minutes. Primarily manages their own entries and checks the calendar.
 
+> **Note on seed data naming:** The seeded demo accounts use different names than the personas above (no "Grace Hall" account exists; team members are Sarah Ahmed, John Williams, Maria Garcia, David Chen). The personas describe *roles*, not literal seeded usernames — see D-25.
 ---
 
 ## 3. User Stories
@@ -313,23 +314,28 @@ The calendar remains the most visually complex component. Key design decisions:
 | D-20 | Team Calendar proposed inside `/dashboard` | Team Calendar built as its own route, `/calendar` | Combining a data-dense calendar with KPI cards on one page would be visually cluttered; separate routes keep each screen focused |
 | D-21 | Route named `/team` | Built as `/team-plan` | More descriptive of the actual content (team plan entries), avoids ambiguity with other "team"-related concepts |
 | D-22 | One-pager routed by `:name` | Routed by `:userId` (GUID) | Names aren't guaranteed unique identifiers; using the actual database ID is the correct, collision-safe approach. A `/one-pager` picker page lists people by name and links to the correct ID-based URL |
+| D-23 | No conflict detection on flight bookings | A traveller cannot have two overlapping flights booked; overlap check runs on create/update, mirroring the Trip/TeamPlan double-booking rule | Same data-integrity gap as D-11, discovered during testing when a duplicate flight booking slipped through unvalidated |
+| D-24 | No automated tests in original scope | xUnit + `WebApplicationFactory` test suite (6 tests covering double-booking, RBAC, and Import rollback) + GitHub Actions CI workflow, verified green on every push | Converts the highest-value manual test cases into automated, repeatable proof; satisfies the "Automated tests + CI pipeline" bonus item |
+| D-25 | Seed data uses prototype's original names (Grace Hall, Prague, Northwind) | Seed data rebuilt with different placeholder names (Dubai/Karachi/Lahore, no Grace Hall account) due to timeline constraints | All capabilities and user stories remain fully supported; only cosmetic demo-data naming differs from the original prototype/persona narrative |
 ---
 
 ## 9. Seed Data Requirements
 
-The following data must load automatically on first `docker compose up`:
+The following data loads automatically on first `docker compose up`:
 
-| Entity | Count | Source |
+| Entity | Count | Notes |
 |---|---|---|
-| Users | 8 | Alex Morgan (CEO), Grace Hall (Admin), + 6 team members |
-| CEO Trips | 1 | Prague, Czechia — Northwind (23–25 Jun) with 4 meetings |
-| Flights | 8 | Default flights from prototype (Vienna↔Prague, Singapore↔Prague, Amsterdam↔NY) |
-| Team Plan Entries | ~12 | Default entries for all 8 people from prototype |
-| Directory Cities | 12+ | Prague, Vienna, Amsterdam, US, Lisbon, Bangkok, Jakarta, KL, Singapore, HK, Warsaw, Zurich, Seoul, Other |
-| Directory Contacts | 100+ | All contacts from prototype's DEFAULT_DIR |
-| Hotels | 10 | Default hotels per city from prototype |
-| Projects | 15 | All project names from prototype |
-| Entities | 9 | All MGH entity names from prototype |
+| Users | 6 | Alex Morgan (CEO), System Administrator (Admin), Sarah Ahmed, John Williams, Maria Garcia, David Chen (Employee role) |
+| CEO Trips | 6+ | Dubai, Karachi, Lahore — mix of Confirmed/Option status, with meetings, hotels, and team assignments |
+| Flights | Several | Linked to specific trips and travellers, with departure/arrival airports and times |
+| Team Plan Entries | Several | Trip / Option / Vacation / Remote types across seeded users |
+| Directory Cities | 4+ | Dubai, Karachi, Lahore, Islamabad |
+| Directory Contacts | Several per city | Organization, role, email, phone |
+| Hotels | 1+ per city | Expandable via the Hotels module |
+| Projects | 5+ | Including seeded system projects and one custom (non-system) project |
+| Entities | 6+ | Including seeded system entities and one custom (non-system) entity |
+
+> **Deviation note:** Seed data was rebuilt with different city/company/person names than the original prototype (which specified Prague/Northwind and a "Grace Hall" persona) due to timeline constraints. Capability parity — every user story in Section 3 — is unaffected; only the specific demo names differ. See D-25.
 
 ---
 
