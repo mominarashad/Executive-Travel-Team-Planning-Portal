@@ -218,79 +218,86 @@ export default function OnePagerViewPage() {
           </section>
 
           {/* ---- Meetings ---- */}
-          <section>
-            <h2 className="text-base font-semibold mb-3 uppercase tracking-wide text-gray-700">Meetings</h2>
-            {data.meetings.length === 0 ? (
-              <p className="text-gray-400 text-sm">No meetings scheduled.</p>
-            ) : (
-              <div className="space-y-6">
-                {data.meetings.map((m, i) => (
-                  <div key={i} className="border rounded-lg overflow-hidden page-break-avoid">
-                    <table>
-                      <tbody>
-                        <tr className="bg-gray-50">
-                          <td className="p-2 font-semibold w-1/4">Meeting #{m.displayOrder}</td>
-                          <td className="p-2" colSpan={3}>
-                            {m.contactName} — {m.tripCity} ({m.tripStartDate} → {m.tripEndDate})
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="p-2 text-gray-500">Time</td>
-                          <td className="p-2">{m.scheduledTime || "—"}</td>
-                          <td className="p-2 text-gray-500">Priority</td>
-                          <td className="p-2">{m.priority}</td>
-                        </tr>
-                        <tr>
-                          <td className="p-2 text-gray-500">Status</td>
-                          <td className="p-2">{m.status}</td>
-                          <td className="p-2 text-gray-500">Project / Entity</td>
-                          <td className="p-2">
-                            {m.projectName || "—"}{m.projectName && m.businessEntityName && " / "}{m.businessEntityName || (!m.projectName ? "—" : "")}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="p-2 text-gray-500 align-top">Agenda</td>
-                          <td className="p-2" colSpan={3}>{m.agenda || "—"}</td>
-                        </tr>
-                        <tr>
-                          <td className="p-2 text-gray-500 align-top">Team</td>
-                          <td className="p-2" colSpan={3}>{m.team.length > 0 ? m.team.join(", ") : "—"}</td>
-                        </tr>
-                      </tbody>
-                    </table>
+<section>
+  <h2 className="text-base font-semibold mb-3 uppercase tracking-wide text-gray-700">Meetings</h2>
+  {data.meetings.length === 0 ? (
+    <p className="text-gray-400 text-sm">No meetings scheduled.</p>
+  ) : (
+    <div className="space-y-6">
+      {(() => {
+        const orderCounters: Record<string, number> = {};
+        return data.meetings.map((m, i) => {
+          orderCounters[m.tripId] = (orderCounters[m.tripId] || 0) + 1;
+          const displayNumber = orderCounters[m.tripId];
+          return (
+            <div key={i} className="border rounded-lg overflow-hidden page-break-avoid">
+              <table>
+                <tbody>
+                  <tr className="bg-gray-50">
+                    <td className="p-2 font-semibold w-1/4">Meeting #{displayNumber}</td>
+                    <td className="p-2" colSpan={3}>
+                      {m.contactName} — {m.tripCity} ({m.tripStartDate} → {m.tripEndDate})
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 text-gray-500">Time</td>
+                    <td className="p-2">{m.scheduledTime || "—"}</td>
+                    <td className="p-2 text-gray-500">Priority</td>
+                    <td className="p-2">{m.priority}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 text-gray-500">Status</td>
+                    <td className="p-2">{m.status}</td>
+                    <td className="p-2 text-gray-500">Project / Entity</td>
+                    <td className="p-2">
+                      {m.projectName || "—"}{m.projectName && m.businessEntityName && " / "}{m.businessEntityName || (!m.projectName ? "—" : "")}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 text-gray-500 align-top">Agenda</td>
+                    <td className="p-2" colSpan={3}>{m.agenda || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 text-gray-500 align-top">Team</td>
+                    <td className="p-2" colSpan={3}>{m.team.length > 0 ? m.team.join(", ") : "—"}</td>
+                  </tr>
+                </tbody>
+              </table>
 
-                    <div className="p-2">
-                      <p className="text-xs font-semibold text-gray-600 uppercase mb-1 mt-1">Materials to Prepare</p>
-                      {m.materials.length === 0 ? (
-                        <p className="text-gray-400 text-xs pb-1">None required.</p>
-                      ) : (
-                        <table>
-                          <thead>
-                            <tr className="bg-gray-50 text-left text-gray-600">
-                              <th className="p-2 w-8">✓</th>
-                              <th className="p-2">Description</th>
-                              <th className="p-2">Owner</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {m.materials.map((mat, j) => (
-                              <tr key={j}>
-                                <td className="p-2 text-center">☐</td>
-                                <td className="p-2">{mat.description}</td>
-                                <td className="p-2">{mat.ownerName || "—"}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <div className="p-2">
+                <p className="text-xs font-semibold text-gray-600 uppercase mb-1 mt-1">Materials to Prepare</p>
+                {m.materials.length === 0 ? (
+                  <p className="text-gray-400 text-xs pb-1">None required.</p>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr className="bg-gray-50 text-left text-gray-600">
+                        <th className="p-2 w-8">✓</th>
+                        <th className="p-2">Description</th>
+                        <th className="p-2">Owner</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {m.materials.map((mat, j) => (
+                        <tr key={j}>
+                          <td className="p-2 text-center">☐</td>
+                          <td className="p-2">{mat.description}</td>
+                          <td className="p-2">{mat.ownerName || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
-            )}
-          </section>
-        </div>
-      )}
+            </div>
+          );
+        });
+      })()}
     </div>
+  )}
+</section>
+</div>
+)}
+</div>
   );
 }
