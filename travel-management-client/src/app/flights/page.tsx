@@ -77,6 +77,21 @@ export default function FlightsPage() {
         setArrivalAirport(""); setAircraft(""); setBookingReference("");
         setFormError(null);
     }
+    function handleTripChange(newTripId: string) {
+        setTripId(newTripId);
+        const selectedTrip = trips.find((t) => t.id === newTripId);
+        if (selectedTrip && selectedTrip.teamMemberIds.length > 0 && !selectedTrip.teamMemberIds.includes(userId)) {
+            setUserId(""); // clear traveller if they're not on the newly selected trip
+        }
+    }
+
+    function getAvailableTravellers(): AppUser[] {
+        const selectedTrip = trips.find((t) => t.id === tripId);
+        if (selectedTrip && selectedTrip.teamMemberIds.length > 0) {
+            return users.filter((u) => selectedTrip.teamMemberIds.includes(u.id));
+        }
+        return users; // no trip selected yet, or trip has no team assigned — show everyone
+    }
 
     async function handleCreate(e: FormEvent) {
         e.preventDefault();
@@ -165,16 +180,16 @@ export default function FlightsPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium mb-1">Trip</label>
-                                <select required value={tripId} onChange={(e) => setTripId(e.target.value)} className="w-full border border-gray-200 rounded-lg p-2 text-sm">
+                                <select required value={tripId} onChange={(e) => handleTripChange(e.target.value)} className="w-full border border-gray-200 rounded-lg p-2 text-sm">
                                     <option value="">Select a trip</option>
                                     {trips.map((t) => <option key={t.id} value={t.id}>{t.destinationCity} ({t.startDate})</option>)}
                                 </select>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1">Traveller</label>
-                                <select required value={userId} onChange={(e) => setUserId(e.target.value)} className="w-full border border-gray-200 rounded-lg p-2 text-sm">
-                                    <option value="">Select a person</option>
-                                    {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                <select required value={userId} onChange={(e) => setUserId(e.target.value)} className="w-full border border-gray-200 rounded-lg p-2 text-sm" disabled={!tripId}>
+                                    <option value="">{tripId ? "Select a person" : "Select a trip first"}</option>
+                                    {getAvailableTravellers().map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                                 </select>
                             </div>
                             <div>
@@ -278,14 +293,14 @@ export default function FlightsPage() {
                                             <td className="p-3">
 
                                                 <a href={googleFlightsUrl(f.departureAirport, f.arrivalAirport, f.departureTime)}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-[#0f3c3c] hover:underline text-xs">
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-[#0f3c3c] hover:underline text-xs">
 
-                                                Search {"->"}
+                                                    Search {"->"}
 
                                                 </a>
-                 
+
                                             </td             >
                                             <td className="p-3">
                                                 <div className="flex gap-2">
