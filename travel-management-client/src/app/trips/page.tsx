@@ -22,7 +22,12 @@ import { Hotel } from "@/types/hotel";
 import { usePolling } from "@/hooks/usePolling";
 import { bulkCreateTrips } from "@/services/tripService";
 import { BulkTripLeg } from "@/types/trip";
+import { createProject } from "@/services/projectService";
+import { createBusinessEntity } from "@/services/businessEntityService";
+
 const OTHER_HOTEL = "__other__";
+const OTHER_PROJECT = "__other_project__";
+const OTHER_ENTITY = "__other_entity__";
 
 export default function TripsPage() {
   const { user } = useAuth();
@@ -49,6 +54,8 @@ export default function TripsPage() {
   const [transport, setTransport] = useState("");
   const [notes, setNotes] = useState("");
   const [teamMemberIds, setTeamMemberIds] = useState<string[]>([]);
+  const [customProjectName, setCustomProjectName] = useState("");
+  const [customEntityName, setCustomEntityName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [mode, setMode] = useState<"none" | "single" | "bulk">("none");
@@ -169,50 +176,96 @@ export default function TripsPage() {
     setFormError(null);
   }
   async function handleCreate(e: FormEvent) {
-    e.preventDefault();
-    setFormError(null);
-    setSubmitting(true);
-    try {
-      let hotelName = "";
+  e.preventDefault();
+  setFormError(null);
+  setSubmitting(true);
+  try {
+    let resolvedProjectId: string | null = projectId || null;
+    if (projectId === OTHER_PROJECT) {
+      if (customProjectName.trim() === "") {
+        setFormError("Please enter a project name.");
+        setSubmitting(false);
+        return;
+      }
+      try {
+        const newProject = await createProject({ name: customProjectName.trim() });
+        resolvedProjectId = newProject.id;
+        setProjects((prev) => [...prev, newProject]);
+      } catch (err: any) {
+        setFormError(err?.response?.data?.message || "Failed to create project.");
+        setSubmitting(false);
+        return;
+      }
+    }
 
-      if (hotelSelection === OTHER_HOTEL) {
-        if (customHotelName.trim() === "") {
-          setFormError("Please enter a hotel name.");
-          setSubmitting(false);
-          return;
-        }
+    let resolvedEntityId: string | null = businessEntityId || null;
+    if (businessEntityId === OTHER_ENTITY) {
+      if (customEntityName.trim() === "") {
+        setFormError("Please enter an entity name.");
+        setSubmitting(false);
+        return;
+      }
+      try {
+        const newEntity = await createBusinessEntity({ name: customEntityName.trim() });
+        resolvedEntityId = newEntity.id;
+        setEntities((prev) => [...prev, newEntity]);
+      } catch (err: any) {
+        setFormError(err?.response?.data?.message || "Failed to create entity.");
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    let hotelName = "";
+
+    if (hotelSelection === OTHER_HOTEL) {
+      if (customHotelName.trim() === "") {
+        setFormError("Please enter a hotel name.");
+        setSubmitting(false);
+        return;
+      }
+      try {
         const newHotel = await createHotel({
           cityId: destinationCityId,
           name: customHotelName.trim(),
           isCustom: true,
         });
         hotelName = newHotel.name;
-      } else if (hotelSelection) {
-        const chosen = hotels.find((h) => h.id === hotelSelection);
-        hotelName = chosen?.name || "";
+        const refreshedHotels = await getHotelsByCity(destinationCityId);
+        setHotels(refreshedHotels);
+      } catch (err: any) {
+        const alreadyExists = err?.response?.data?.message?.includes("already exists");
+        if (alreadyExists) {
+          hotelName = customHotelName.trim();
+          const refreshedHotels = await getHotelsByCity(destinationCityId);
+          setHotels(refreshedHotels);
+        } else {
+          throw err;
+        }
       }
-
-      await createTrip({
-        destinationCityId,
-        startDate,
-        endDate,
-        projectId: projectId || null,
-        businessEntityId: businessEntityId || null,
-        status,
-        hotel: hotelName,
-        transport,
-        notes,
-        teamMemberIds,
-      });
-      setShowForm(false);
-      resetForm();
-      await loadAll();
-    } catch (err: any) {
-      setFormError(err?.response?.data?.message || "Failed to create trip.");
-    } finally {
-      setSubmitting(false);
     }
+
+    await createTrip({
+      destinationCityId,
+      startDate,
+      endDate,
+      projectId: resolvedProjectId,
+      businessEntityId: resolvedEntityId,
+      status,
+      hotel: hotelName,
+      transport,
+      notes,
+      teamMemberIds,
+    });
+    setShowForm(false);
+    resetForm();
+    await loadAll();
+  } catch (err: any) {
+    setFormError(err?.response?.data?.message || "Failed to create trip.");
+  } finally {
+    setSubmitting(false);
   }
+}
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this trip?")) return;
@@ -303,7 +356,17 @@ export default function TripsPage() {
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
+                  <option value={OTHER_PROJECT}>Other (add new)...</option>
                 </select>
+                {projectId === OTHER_PROJECT && (
+                  <input
+                    type="text"
+                    placeholder="New project name"
+                    value={customProjectName}
+                    onChange={(e) => setCustomProjectName(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg p-2 text-sm mt-2"
+                  />
+                )}
               </div>
 
               <div>
@@ -317,7 +380,17 @@ export default function TripsPage() {
                   {entities.map((e) => (
                     <option key={e.id} value={e.id}>{e.name}</option>
                   ))}
+                  <option value={OTHER_ENTITY}>Other (add new)...</option>
                 </select>
+                {businessEntityId === OTHER_ENTITY && (
+                  <input
+                    type="text"
+                    placeholder="New entity name"
+                    value={customEntityName}
+                    onChange={(e) => setCustomEntityName(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg p-2 text-sm mt-2"
+                  />
+                )}
               </div>
 
               <div>
