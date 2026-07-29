@@ -14,7 +14,7 @@ import { Flight } from "@/types/flight";
 import { TripDetail } from "@/types/trip";
 import { Contact } from "@/types/directory";
 import { AppUser } from "@/types/user";
-
+import { createContact } from "@/services/directoryService";
 import { getCities } from "@/services/directoryService";
 import { getProjects } from "@/services/projectService";
 import { getBusinessEntities } from "@/services/businessEntityService";
@@ -25,10 +25,15 @@ import { City } from "@/types/city";
 import { Project } from "@/types/project";
 import { BusinessEntity } from "@/types/businessEntity";
 import { Hotel } from "@/types/hotel";
+import { createProject } from "@/services/projectService";
+import { createBusinessEntity } from "@/services/businessEntityService";
+
 
 const PRIORITIES = ["High", "Medium", "Low"];
 const STATUSES = ["Proposed", "Requested", "Confirmed", "Tentative", "Declined", "Completed"];
-
+const OTHER_PROJECT = "__other_project__";
+const OTHER_ENTITY = "__other_entity__";
+const OTHER_CONTACT = "__other_contact__";
 interface MaterialRow {
   description: string;
   ownerId: string;
@@ -90,7 +95,14 @@ export default function TripDetailPage() {
   const [flightError, setFlightError] = useState<string | null>(null);
   const [flightSubmitting, setFlightSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editCustomProjectName, setEditCustomProjectName] = useState("");
+  const [editCustomEntityName, setEditCustomEntityName] = useState("");
 
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactOrg, setNewContactOrg] = useState("");
+  const [newContactRole, setNewContactRole] = useState("");
+  const [newContactEmail, setNewContactEmail] = useState("");
+  const [newContactPhone, setNewContactPhone] = useState("");
   const OTHER_HOTEL = "__other__";
   const [submitting, setSubmitting] = useState(false);
 
@@ -175,6 +187,42 @@ export default function TripDetailPage() {
     setEditError(null);
     setEditSubmitting(true);
     try {
+      let resolvedProjectId: string | null = editProjectId || null;
+      if (editProjectId === OTHER_PROJECT) {
+        if (editCustomProjectName.trim() === "") {
+          setEditError("Please enter a project name.");
+          setEditSubmitting(false);
+          return;
+        }
+        try {
+          const newProject = await createProject({ name: editCustomProjectName.trim() });
+          resolvedProjectId = newProject.id;
+          setProjects((prev) => [...prev, newProject]);
+        } catch (err: any) {
+          setEditError(err?.response?.data?.message || "Failed to create project.");
+          setEditSubmitting(false);
+          return;
+        }
+      }
+
+      let resolvedEntityId: string | null = editEntityId || null;
+      if (editEntityId === OTHER_ENTITY) {
+        if (editCustomEntityName.trim() === "") {
+          setEditError("Please enter an entity name.");
+          setEditSubmitting(false);
+          return;
+        }
+        try {
+          const newEntity = await createBusinessEntity({ name: editCustomEntityName.trim() });
+          resolvedEntityId = newEntity.id;
+          setEntities((prev) => [...prev, newEntity]);
+        } catch (err: any) {
+          setEditError(err?.response?.data?.message || "Failed to create entity.");
+          setEditSubmitting(false);
+          return;
+        }
+      }
+
       let hotelName = editCustomHotel;
 
       if (editHotelSelection === OTHER_HOTEL) {
@@ -183,12 +231,25 @@ export default function TripDetailPage() {
           setEditSubmitting(false);
           return;
         }
-        const newHotel = await createHotel({
-          cityId: editCityId,
-          name: editCustomHotel.trim(),
-          isCustom: true,
-        });
-        hotelName = newHotel.name;
+        try {
+          const newHotel = await createHotel({
+            cityId: editCityId,
+            name: editCustomHotel.trim(),
+            isCustom: true,
+          });
+          hotelName = newHotel.name;
+          const refreshedHotels = await getHotelsByCity(editCityId);
+          setHotels(refreshedHotels);
+        } catch (err: any) {
+          const alreadyExists = err?.response?.data?.message?.includes("already exists");
+          if (alreadyExists) {
+            hotelName = editCustomHotel.trim();
+            const refreshedHotels = await getHotelsByCity(editCityId);
+            setHotels(refreshedHotels);
+          } else {
+            throw err;
+          }
+        }
       } else if (editHotelSelection) {
         const chosen = hotels.find((h) => h.id === editHotelSelection);
         hotelName = chosen?.name || editCustomHotel;
@@ -198,8 +259,8 @@ export default function TripDetailPage() {
         destinationCityId: (trip.meetings?.length || 0) > 0 ? trip.destinationCityId : editCityId,
         startDate: editStartDate,
         endDate: editEndDate,
-        projectId: editProjectId || null,
-        businessEntityId: editEntityId || null,
+        projectId: resolvedProjectId,
+        businessEntityId: resolvedEntityId,
         status: editStatus,
         hotel: hotelName,
         transport: editTransport,
@@ -214,7 +275,6 @@ export default function TripDetailPage() {
       setEditSubmitting(false);
     }
   }
-
   function resetForm() {
     setContactId("");
     setPriority("Medium");
@@ -225,8 +285,12 @@ export default function TripDetailPage() {
     setMaterials([]);
     setFormError(null);
     setDisplayOrder((trip?.meetings?.length || 0) + 1);
+    setNewContactName("");
+    setNewContactOrg("");
+    setNewContactRole("");
+    setNewContactEmail("");
+    setNewContactPhone("");
   }
-
   function toggleAttendee(id: string) {
     setAttendeeIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
@@ -309,9 +373,37 @@ export default function TripDetailPage() {
     setFormError(null);
     setSubmitting(true);
     try {
+      let resolvedContactId = contactId;
+
+      if (contactId === OTHER_CONTACT) {
+        if (newContactName.trim() === "") {
+          setFormError("Please enter a contact name.");
+          setSubmitting(false);
+          return;
+        }
+        try {
+          const newContact = await createContact({
+            name: newContactName.trim(),
+            organization: newContactOrg.trim(),
+            role: newContactRole.trim(),
+            email: newContactEmail.trim(),
+            phone: newContactPhone.trim(),
+            sortOrder: 0,
+            cityId: trip!.destinationCityId,
+          });
+          resolvedContactId = newContact.id;
+          setContacts((prev) => [...prev, newContact]);
+        } catch (err: any) {
+          setFormError(err?.response?.data?.message || "Failed to create contact.");
+          setSubmitting(false);
+          return;
+        }
+      }
+
       await createMeeting({
         tripId: params.tripId,
-        contactId,
+        contactId: resolvedContactId,
+
         displayOrder,
         priority,
         status,
@@ -493,12 +585,17 @@ export default function TripDetailPage() {
                       <div className="mt-4">
                         <p className="text-xs text-gray-500 mb-2">Flights on this trip:</p>
                         <div className="space-y-1">
-                          {tripFlights.map((f) => (
-                            <div key={f.id} className="text-sm bg-gray-50 rounded p-2 flex justify-between">
-                              <span>{f.airline} {f.flightNumber} — {f.departureAirport} → {f.arrivalAirport}</span>
-                              <span className="text-gray-500">{f.departureTime.split("T")[0]}</span>
-                            </div>
-                          ))}
+                          {tripFlights.map((f) => {
+                            const traveler = users.find((u) => u.id === f.userId);
+                            return (
+                              <div key={f.id} className="text-sm bg-gray-50 rounded p-2 flex justify-between">
+                                <span>
+                                  <strong>{traveler?.name || "Unknown"}</strong> — {f.airline} {f.flightNumber} — {f.departureAirport} → {f.arrivalAirport}
+                                </span>
+                                <span className="text-gray-500">{f.departureTime.split("T")[0]}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -565,7 +662,15 @@ export default function TripDetailPage() {
                       <select value={editProjectId} onChange={(e) => setEditProjectId(e.target.value)} className="w-full border border-gray-200 rounded-lg p-2 text-sm">
                         <option value="">— None —</option>
                         {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        <option value={OTHER_PROJECT}>Other (add new)...</option>
                       </select>
+                      {editProjectId === OTHER_PROJECT && (
+                        <input
+                          type="text" placeholder="New project name" value={editCustomProjectName}
+                          onChange={(e) => setEditCustomProjectName(e.target.value)}
+                          className="w-full border border-gray-200 rounded-lg p-2 text-sm mt-2"
+                        />
+                      )}
                     </div>
 
                     <div>
@@ -573,9 +678,16 @@ export default function TripDetailPage() {
                       <select value={editEntityId} onChange={(e) => setEditEntityId(e.target.value)} className="w-full border border-gray-200 rounded-lg p-2 text-sm">
                         <option value="">— None —</option>
                         {entities.map((ent) => <option key={ent.id} value={ent.id}>{ent.name}</option>)}
+                        <option value={OTHER_ENTITY}>Other (add new)...</option>
                       </select>
+                      {editEntityId === OTHER_ENTITY && (
+                        <input
+                          type="text" placeholder="New entity name" value={editCustomEntityName}
+                          onChange={(e) => setEditCustomEntityName(e.target.value)}
+                          className="w-full border border-gray-200 rounded-lg p-2 text-sm mt-2"
+                        />
+                      )}
                     </div>
-
                     <div>
                       <label className="block text-sm font-medium mb-1">Start Date</label>
                       <input type="date" required value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
@@ -652,18 +764,47 @@ export default function TripDetailPage() {
                 {formError && <p className="text-red-600 text-sm">{formError}</p>}
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <div className="col-span-2">
                     <label className="block text-sm font-medium mb-1">Contact</label>
                     <select required value={contactId} onChange={(e) => setContactId(e.target.value)} className="w-full border border-gray-200 rounded-lg p-2 text-sm">
                       <option value="">Select a contact</option>
                       {contacts.map((c) => (
                         <option key={c.id} value={c.id}>{c.name}{c.organization && ` — ${c.organization}`}</option>
                       ))}
+                      <option value={OTHER_CONTACT}>Other (add new contact)...</option>
                     </select>
-                    {contacts.length === 0 && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        No contacts for this city yet — add some in the Directory first.
-                      </p>
+
+                    {contactId === OTHER_CONTACT && (
+                      <div className="bg-gray-50 rounded-lg p-3 mt-2 grid grid-cols-2 gap-2">
+                        <input
+                          placeholder="Name" required value={newContactName}
+                          onChange={(e) => setNewContactName(e.target.value)}
+                          className="border border-gray-200 rounded p-2 text-sm col-span-2"
+                        />
+                        <input
+                          placeholder="Organization" value={newContactOrg}
+                          onChange={(e) => setNewContactOrg(e.target.value)}
+                          className="border border-gray-200 rounded p-2 text-sm"
+                        />
+                        <input
+                          placeholder="Role" value={newContactRole}
+                          onChange={(e) => setNewContactRole(e.target.value)}
+                          className="border border-gray-200 rounded p-2 text-sm"
+                        />
+                        <input
+                          placeholder="Email" value={newContactEmail}
+                          onChange={(e) => setNewContactEmail(e.target.value)}
+                          className="border border-gray-200 rounded p-2 text-sm"
+                        />
+                        <input
+                          placeholder="Phone" value={newContactPhone}
+                          onChange={(e) => setNewContactPhone(e.target.value)}
+                          className="border border-gray-200 rounded p-2 text-sm"
+                        />
+                        <p className="text-xs text-gray-400 col-span-2">
+                          This will be added to the Directory under {trip.destinationCity}.
+                        </p>
+                      </div>
                     )}
                   </div>
 
@@ -744,11 +885,11 @@ export default function TripDetailPage() {
             )}
 
             <div className="space-y-3">
-              {(trip.meetings || []).map((m) => (
+              {(trip.meetings || []).map((m, i) => (
                 <div key={m.id} className="bg-white rounded-xl shadow p-5">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="font-medium">#{m.displayOrder} — {m.contactName}</p>
+                      <p className="font-medium">#{i + 1} — {m.contactName}</p>
                       <p className="text-xs text-gray-500">
                         {m.scheduledTime && `${m.scheduledTime} · `}{m.priority} priority · {m.status}
                       </p>
