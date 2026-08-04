@@ -67,6 +67,7 @@ using TravelManagement.API.Features.DataManagement.Services;
 using TravelManagement.API.Features.Email;
 using TravelManagement.API.Features.Email.Interfaces;
 using TravelManagement.API.Features.Email.Services;
+
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors(options =>
