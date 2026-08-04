@@ -29,6 +29,7 @@ bld/
 *.sln.iml
 .idea/
 *.DotSettings.user
+*.json
 
 ## NuGet ##
 *.nupkg
